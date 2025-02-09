@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Image, StyleSheet, Platform, View, Text, Button, FlatList, TouchableOpacity } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { Image, StyleSheet, Platform, View, Text, Button, FlatList, TouchableOpacity, TextInput } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
+import * as Notifications from 'expo-notifications';
 
 import { HelloWave } from '@/components/HelloWave';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
@@ -12,19 +13,50 @@ import { ThemedView } from '@/components/ThemedView';
 export default function HomeScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [schedules, setSchedules] = useState([]);
-  const [selectedImage, setSelectedImage] = useState(null);
+  const [schedules, setSchedules] = useState<{ date: Date; hour: number; image: string | null; text: string }[]>([]);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  const [scheduleText, setScheduleText] = useState('');
+  const [selectedHour, setSelectedHour] = useState<number | null>(null);
 
-  const onDateChange = (event, date) => {
+  useEffect(() => {
+    registerForPushNotificationsAsync();
+  }, []);
+
+  const registerForPushNotificationsAsync = async () => {
+    const { status } = await Notifications.requestPermissionsAsync();
+    if (status !== 'granted') {
+      alert('通知の許可が必要です。');
+    }
+  };
+
+  const onDateChange = (event: any, date: Date | undefined) => {
     setShowDatePicker(false);
     if (date) {
       setSelectedDate(date);
     }
   };
 
-  const addSchedule = (hour) => {
-    setSchedules([...schedules, { date: selectedDate, hour, image: selectedImage }]);
+  const addSchedule = () => {
+    if (selectedHour === null) {
+      alert('時間を選択してください。');
+      return;
+    }
+    const newSchedule = {
+      date: selectedDate,
+      hour: selectedHour,
+      image: selectedImage,
+      text: scheduleText,
+    };
+    setSchedules([...schedules, newSchedule]);
     setSelectedImage(null);
+    setScheduleText('');
+    setSelectedHour(null);
+    scheduleNotification(newSchedule);
+  };
+
+  const deleteSchedule = (index: number) => {
+    const newSchedules = schedules.filter((_, i) => i !== index);
+    setSchedules(newSchedules);
   };
 
   const pickImage = async () => {
@@ -35,9 +67,24 @@ export default function HomeScreen() {
       quality: 1,
     });
 
-    if (!result.cancelled) {
-      setSelectedImage(result.uri);
+    if (!result.canceled) {
+      setSelectedImage(result.assets[0].uri);
     }
+  };
+
+  const scheduleNotification = async (schedule: { date: Date; hour: number; image: string | null; text: string }) => {
+    const notificationDate = new Date(schedule.date);
+    notificationDate.setHours(schedule.hour - 24); // 1日前に設定
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'スケジュール通知',
+        body: `${schedule.text} - ${schedule.date.toDateString()} ${schedule.hour}:00`,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: notificationDate,
+      },
+    });
   };
 
   return (
@@ -49,41 +96,7 @@ export default function HomeScreen() {
           style={styles.reactLogo}
         />
       }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12'
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">かっつー</ThemedText>
-        <ThemedText>
-          Tap the Explore tab to learn more about what's included in this starter app.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          When you're ready, run{' '}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
+
       <View style={styles.container}>
         <Text style={styles.title}>スケジュール管理アプリ</Text>
         <Button title="日付を選択" onPress={() => setShowDatePicker(true)} />
@@ -96,11 +109,17 @@ export default function HomeScreen() {
           />
         )}
         <Text style={styles.selectedDate}>{selectedDate.toDateString()}</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="スケジュールを入力"
+          value={scheduleText}
+          onChangeText={setScheduleText}
+        />
         <FlatList
           data={Array.from({ length: 24 }, (_, i) => i)}
           renderItem={({ item }) => (
-            <TouchableOpacity style={styles.timeSlot} onPress={() => addSchedule(item)}>
-              <Text>{item}:00</Text>
+            <TouchableOpacity style={styles.timeSlot} onPress={() => setSelectedHour(item)}>
+              <Text style={selectedHour === item ? styles.selectedTimeSlot : undefined}>{item}:00</Text>
             </TouchableOpacity>
           )}
           keyExtractor={(item) => item.toString()}
@@ -108,12 +127,15 @@ export default function HomeScreen() {
         />
         <Button title="画像を選択" onPress={pickImage} />
         {selectedImage && <Image source={{ uri: selectedImage }} style={styles.image} />}
+        <Button title="登録" onPress={addSchedule} />
         <FlatList
           data={schedules}
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <View style={styles.scheduleItem}>
               <Text>{item.date.toDateString()} {item.hour}:00</Text>
+              <Text>{item.text}</Text>
               {item.image && <Image source={{ uri: item.image }} style={styles.image} />}
+              <Button title="削除" onPress={() => deleteSchedule(index)} />
             </View>
           )}
           keyExtractor={(item, index) => index.toString()}
@@ -156,11 +178,22 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginVertical: 10,
   },
+  input: {
+    height: 40,
+    borderColor: 'gray',
+    borderWidth: 1,
+    marginBottom: 10,
+    paddingHorizontal: 10,
+    width: '100%',
+  },
   timeSlot: {
     padding: 10,
     margin: 5,
     backgroundColor: '#ddd',
     borderRadius: 5,
+  },
+  selectedTimeSlot: {
+    backgroundColor: '#aaa',
   },
   image: {
     width: 100,

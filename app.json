@@ -19,16 +19,12 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.yourcompany.scheduleapp",
-      "config": {
-        "googleSignIn": {
-          "reservedClientId": "YOUR_GOOGLE_SIGN_IN_CLIENT_ID"
-        }
-      },
       "infoPlist": {
         "NSCameraUsageDescription": "This app uses the camera to scan barcodes.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to select images.",
         "NSLocationWhenInUseUsageDescription": "This app uses your location to show nearby places.",
-        "NSUserTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you."
+        "NSUserTrackingUsageDescription": "This identifier will be used to deliver personalized ads to you.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -40,6 +36,11 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "b3a714b3-e257-4763-a6c7-28568c792759"
+      }
     }
   }
 }
